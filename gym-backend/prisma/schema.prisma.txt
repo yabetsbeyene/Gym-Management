@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────── Enums ─────────
+enum Role {
+  ADMIN
+  RECEPTIONIST
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  FROZEN
+  SUSPENDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+}
+
+enum CheckInType {
+  MEMBER
+  DAY_PASS
+}
+
+enum SmsStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+// ───────── Staff ─────────
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(RECEPTIONIST)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  checkIns         CheckIn[]
+  dayPassesCreated DayPass[]
+  notifications    NotificationLog[]
+}
+
+// ───────── Members ─────────
+model Member {
+  id                    String    @id @default(cuid())
+  memberNumber          Int       @unique @default(autoincrement()) // shown as GYM-0001
+  firstName             String
+  lastName              String
+  phone                 String    @unique
+  email                 String?
+  gender                String?
+  dateOfBirth           DateTime? @db.Date
+  address               String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  photoUrl              String?
+  notes                 String?
+  joinedAt              DateTime  @default(now())
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  memberships   Membership[]
+  dayPasses     DayPass[]
+  checkIns      CheckIn[]
+  notifications NotificationLog[]
+
+  @@index([lastName, firstName])
+}
+
+model MembershipPlan {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  durationDays Int
+  price       Decimal  @db.Decimal(10, 2)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships Membership[]
+}
+
+model Membership {
+  id           String           @id @default(cuid())
+  memberId     String
+  planId       String
+  status       MembershipStatus @default(ACTIVE)
+  startDate    DateTime         @db.Date
+  endDate      DateTime         @db.Date
+  frozenAt     DateTime?        // set while FROZEN, used to extend endDate on unfreeze
+  statusReason String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  member Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  plan   MembershipPlan @relation(fields: [planId], references: [id])
+
+  @@index([memberId, status])
+  @@index([endDate])
+}
+
+// ───────── Day passes ─────────
+model Visitor {
+  id        String   @id @default(cuid())
+  fullName  String
+  phone     String?
+  createdAt DateTime @default(now())
+
+  dayPasses DayPass[]
+}
+
+model DayPass {
+  id             String        @id @default(cuid())
+  code           String        @unique // short code the visitor shows at the desk
+  memberId       String?       // existing member buying a day pass
+  visitorId      String?       // OR temporary visitor
+  validDate      DateTime      @db.Date
+  price          Decimal       @db.Decimal(10, 2)
+  paymentStatus  PaymentStatus @default(PENDING)
+  waiverSigned   Boolean       @default(false)
+  waiverSignedAt DateTime?
+  createdById    String
+  createdAt      DateTime      @default(now())
+
+  member    Member?   @relation(fields: [memberId], references: [id])
+  visitor   Visitor?  @relation(fields: [visitorId], references: [id])
+  createdBy User      @relation(fields: [createdById], references: [id])
+  checkIns  CheckIn[]
+
+  @@index([validDate])
+  @@index([memberId, validDate])
+}
+
+// ───────── Check-ins ─────────
+model CheckIn {
+  id            String      @id @default(cuid())
+  type          CheckInType
+  memberId      String?
+  dayPassId     String?
+  checkInTime   DateTime    @default(now())
+  checkedInById String
+
+  member      Member?  @relation(fields: [memberId], references: [id])
+  dayPass     DayPass? @relation(fields: [dayPassId], references: [id])
+  checkedInBy User     @relation(fields: [checkedInById], references: [id])
+
+  @@index([checkInTime])
+  @@index([memberId])
+  @@index([dayPassId])
+}
+
+// ───────── SMS history ─────────
+model NotificationLog {
+  id                String    @id @default(cuid())
+  memberId          String?
+  phone             String
+  message           String
+  status            SmsStatus @default(QUEUED)
+  provider          String?
+  providerMessageId String?
+  error             String?
+  sentById          String?
+  createdAt         DateTime  @default(now())
+
+  member Member? @relation(fields: [memberId], references: [id])
+  sentBy User?   @relation(fields: [sentById], references: [id])
+
+  @@index([memberId])
+  @@index([createdAt])
+}
