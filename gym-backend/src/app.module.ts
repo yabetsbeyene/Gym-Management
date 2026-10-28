@@ -1,9 +1,9 @@
-// src/app.module.ts
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { PrismaModule } from './prisma/prisma.module';
 import { JwtStrategy } from './common/guards';
+import { AuthModule } from './auth/auth.module';
 import { MembersModule } from './members/members.module';
 import { DayPassesModule } from './day-passes/day-passes.module';
 import { CheckInsModule } from './check-ins/check-ins.module';
@@ -15,6 +15,7 @@ import { SmsModule } from './sms/sms.module';
     ConfigModule.forRoot({ isGlobal: true }),
     PassportModule,
     PrismaModule,
+    AuthModule,
     MembersModule,
     DayPassesModule,
     CheckInsModule,
