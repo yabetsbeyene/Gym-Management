@@ -1,3 +1,4 @@
+import { PlansModule } from './plans/plans.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
@@ -21,6 +22,7 @@ import { SmsModule } from './sms/sms.module';
     CheckInsModule,
     DashboardModule,
     SmsModule,
+    PlansModule,
   ],
   providers: [JwtStrategy],
 })
