@@ -25,3 +25,5 @@ export function todayRange() {
 }
 
 export const fmt = (d: Date) => d.toISOString().slice(0, 10);
+/** Last valid day of a membership: a 30-day plan starting Jan 1 ends Jan 30. */
+export const membershipEnd = (start: Date, durationDays: number) => addDays(start, durationDays - 1);

@@ -1,159 +1,139 @@
 "use client";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
+import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { displayStatus, fmtDate, fmtDateTime, fullName, memberCode, statusStyle } from "@/lib/format";
+import type { Member, MembershipStatus, Plan } from "@/lib/types";
 
-const badge: Record<string, string> = {
-  ACTIVE: "bg-green-100 text-green-700",
-  EXPIRED: "bg-slate-200 text-slate-700",
-  FROZEN: "bg-blue-100 text-blue-700",
-  SUSPENDED: "bg-red-100 text-red-700",
-  "NO PLAN": "bg-amber-100 text-amber-700",
-};
-
-function displayStatus(m: any) {
-  const ms = m.memberships?.[0];
-  if (!ms) return "NO PLAN";
-  const today = new Date().toISOString().slice(0, 10);
-  if (ms.status === "ACTIVE" && ms.endDate.slice(0, 10) < today) return "EXPIRED";
-  return ms.status as string;
-}
-
-export default function MembersPage() {
-  const [members, setMembers] = useState<any[]>([]);
-  const [total, setTotal] = useState(0);
-  const [search, setSearch] = useState("");
-  const [plans, setPlans] = useState<any[]>([]);
-  const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", planId: "" });
+export default function MemberProfilePage() {
+  const { id } = useParams<{ id: string }>();
+  const [member, setMember] = useState<Member | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [planId, setPlanId] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
-  const load = useCallback(() => {
-    api(`members?search=${encodeURIComponent(search)}&limit=50`)
-      .then((d) => {
-        setMembers(d.items);
-        setTotal(d.total);
-      })
-      .catch((e) => setError(e.message));
-  }, [search]);
+  const load = useCallback(() => api<Member>(`members/${id}`).then(setMember).catch((e) => setError(e.message)), [id]);
 
   useEffect(() => {
-    const t = setTimeout(load, 300);
-    return () => clearTimeout(t);
+    load();
+    api<Plan[]>("plans").then(setPlans).catch(() => {});
   }, [load]);
 
-  useEffect(() => {
-    api("plans").then(setPlans).catch(() => {});
-  }, []);
-
-  async function addMember(e: FormEvent) {
-    e.preventDefault();
+  async function run(action: () => Promise<unknown>, success: string) {
     setError("");
+    setNotice("");
     try {
-      await api("members", {
-        method: "POST",
-        body: JSON.stringify({ ...form, planId: form.planId || undefined }),
-      });
-      setForm({ firstName: "", lastName: "", phone: "", planId: "" });
-      setShow(false);
-      load();
-    } catch (err: any) {
-      setError(err.message);
+      await action();
+      setNotice(success);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
     }
   }
 
-  async function setStatus(id: string, status: string) {
-    setError("");
-    try {
-      await api(`members/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
-      load();
-    } catch (err: any) {
-      setError(err.message);
-    }
-  }
+  const renew = () =>
+    run(() => api(`members/${id}/renew`, { method: "POST", body: JSON.stringify({ planId }) }), "Membership renewed.");
+  const setStatus = (status: MembershipStatus) =>
+    run(() => api(`members/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }), `Status set to ${status}.`);
 
-  async function sendSms(m: any) {
-    const message = window.prompt(`SMS to ${m.firstName} ${m.lastName} (${m.phone}):`);
-    if (!message) return;
-    try {
-      const r = await api("sms/send", { method: "POST", body: JSON.stringify({ memberId: m.id, message }) });
-      window.alert(`SMS status: ${r.status}`);
-    } catch (err: any) {
-      setError(err.message);
-    }
-  }
+  if (!member) return error ? <div className="rounded bg-red-50 p-3 text-red-700">{error}</div> : <p className="text-slate-500">Loading…</p>;
+
+  const latest = member.memberships[0];
+  const status = displayStatus(latest);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold">Members <span className="text-base font-normal text-slate-500">({total})</span></h1>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name or phone"
-          className="ml-auto w-64 rounded-md border bg-white p-2"
-        />
-        <button onClick={() => setShow(!show)} className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700">
-          {show ? "Cancel" : "+ Add member"}
-        </button>
-      </div>
+    <div className="grid gap-6 lg:grid-cols-[1fr_auto]">
+      <div className="space-y-6 print:hidden">
+        <header className="flex items-center gap-3">
+          <div>
+            <h1 className="text-2xl font-bold">{fullName(member)}</h1>
+            <div className="text-sm text-slate-500">
+              {memberCode(member.memberNumber)} · {member.phone}
+            </div>
+          </div>
+          <span className={`ml-auto rounded px-2 py-1 text-xs font-medium ${statusStyle[status]}`}>{status}</span>
+        </header>
 
-      {error && <div className="rounded bg-red-50 p-3 text-red-700">{error}</div>}
+        {error && <div className="rounded bg-red-50 p-3 text-red-700">{error}</div>}
+        {notice && <div className="rounded bg-green-50 p-3 text-green-700">{notice}</div>}
 
-      {show && (
-        <form onSubmit={addMember} className="grid gap-3 rounded-xl border bg-white p-4 md:grid-cols-5">
-          <input className="rounded-md border p-2" placeholder="First name" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} required />
-          <input className="rounded-md border p-2" placeholder="Last name" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} required />
-          <input className="rounded-md border p-2" placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
-          <select className="rounded-md border bg-white p-2" value={form.planId} onChange={(e) => setForm({ ...form, planId: e.target.value })}>
-            <option value="">No plan yet</option>
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>{p.name} ({p.durationDays}d, {Number(p.price)})</option>
+        <section className="space-y-4 rounded-xl border bg-white p-5">
+          <h2 className="font-semibold">Current membership</h2>
+          {latest ? (
+            <div className="text-sm text-slate-600">
+              {latest.plan?.name} · {fmtDate(latest.startDate)} → {fmtDate(latest.endDate)}
+            </div>
+          ) : (
+            <div className="text-sm text-slate-500">No membership yet.</div>
+          )}
+          {latest && (
+            <div className="flex gap-2">
+              {latest.status !== "FROZEN" && <button onClick={() => setStatus("FROZEN")} className="rounded border px-3 py-1 text-sm hover:bg-slate-50">Freeze</button>}
+              {latest.status !== "SUSPENDED" && <button onClick={() => setStatus("SUSPENDED")} className="rounded border px-3 py-1 text-sm hover:bg-slate-50">Suspend</button>}
+              {latest.status !== "ACTIVE" && <button onClick={() => setStatus("ACTIVE")} className="rounded border px-3 py-1 text-sm hover:bg-slate-50">Activate</button>}
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-3 rounded-xl border bg-white p-5">
+          <h2 className="font-semibold">Renew membership</h2>
+          <div className="flex gap-2">
+            <select value={planId} onChange={(e) => setPlanId(e.target.value)} className="flex-1 rounded-md border bg-white p-2">
+              <option value="">Choose a plan…</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.durationDays} days, {Number(p.price)})
+                </option>
+              ))}
+            </select>
+            <button disabled={!planId} onClick={renew} className="rounded-md bg-indigo-600 px-4 font-medium text-white hover:bg-indigo-700 disabled:opacity-40">
+              Renew
+            </button>
+          </div>
+          <p className="text-xs text-slate-500">If the current membership is still running, the new one starts the day after it ends.</p>
+        </section>
+
+        <section className="rounded-xl border bg-white p-5">
+          <h2 className="mb-2 font-semibold">History</h2>
+          <ul className="divide-y text-sm">
+            {member.memberships.map((m) => (
+              <li key={m.id} className="flex justify-between py-2">
+                <span>{m.plan?.name} · {fmtDate(m.startDate)} → {fmtDate(m.endDate)}</span>
+                <span className={`rounded px-2 text-xs ${statusStyle[displayStatus(m)]}`}>{displayStatus(m)}</span>
+              </li>
             ))}
-          </select>
-          <button className="rounded-md bg-green-600 p-2 font-medium text-white hover:bg-green-700">Save</button>
-        </form>
-      )}
+          </ul>
+        </section>
 
-      <div className="overflow-x-auto rounded-xl border bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-600">
-            <tr>
-              <th className="p-3">#</th>
-              <th className="p-3">Name</th>
-              <th className="p-3">Phone</th>
-              <th className="p-3">Plan</th>
-              <th className="p-3">Expires</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {members.length === 0 && (
-              <tr><td colSpan={7} className="p-4 text-slate-500">No members found.</td></tr>
-            )}
-            {members.map((m) => {
-              const ms = m.memberships?.[0];
-              const st = displayStatus(m);
-              return (
-                <tr key={m.id}>
-                  <td className="p-3 font-mono text-xs">GYM-{String(m.memberNumber).padStart(4, "0")}</td>
-                  <td className="p-3 font-medium">{m.firstName} {m.lastName}</td>
-                  <td className="p-3">{m.phone}</td>
-                  <td className="p-3">{ms?.plan?.name ?? "-"}</td>
-                  <td className="p-3">{ms ? ms.endDate.slice(0, 10) : "-"}</td>
-                  <td className="p-3"><span className={`rounded px-2 py-0.5 text-xs font-medium ${badge[st]}`}>{st}</span></td>
-                  <td className="flex flex-wrap gap-1 p-3">
-                    {ms && ms.status !== "FROZEN" && <button onClick={() => setStatus(m.id, "FROZEN")} className="rounded border px-2 py-1 text-xs hover:bg-slate-50">Freeze</button>}
-                    {ms && ms.status !== "SUSPENDED" && <button onClick={() => setStatus(m.id, "SUSPENDED")} className="rounded border px-2 py-1 text-xs hover:bg-slate-50">Suspend</button>}
-                    {ms && ms.status !== "ACTIVE" && <button onClick={() => setStatus(m.id, "ACTIVE")} className="rounded border px-2 py-1 text-xs hover:bg-slate-50">Activate</button>}
-                    <button onClick={() => sendSms(m)} className="rounded border px-2 py-1 text-xs hover:bg-slate-50">SMS</button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <section className="rounded-xl border bg-white p-5">
+          <h2 className="mb-2 font-semibold">Recent check-ins</h2>
+          {member.checkIns?.length ? (
+            <ul className="divide-y text-sm">
+              {member.checkIns.map((c) => (
+                <li key={c.id} className="py-2">{fmtDateTime(c.checkInTime)}</li>
+              ))}
+            </ul>
+          ) : (
+            <div className="text-sm text-slate-500">No check-ins yet.</div>
+          )}
+        </section>
       </div>
+
+      <aside className="space-y-3">
+        <div className="w-72 rounded-2xl border-2 border-indigo-600 bg-white p-5 text-center">
+          <div className="text-xs font-semibold tracking-widest text-indigo-600">GYMMANAGER MEMBER</div>
+          <div className="mt-2 text-lg font-bold">{fullName(member)}</div>
+          <div className="font-mono text-sm text-slate-600">{memberCode(member.memberNumber)}</div>
+          <div className="mt-3 flex justify-center">
+            <QRCodeSVG value={member.id} size={176} />
+          </div>
+        </div>
+        <button onClick={() => window.print()} className="w-full rounded-md border bg-white p-2 text-sm hover:bg-slate-50 print:hidden">
+          Print card
+        </button>
+      </aside>
     </div>
   );
 }

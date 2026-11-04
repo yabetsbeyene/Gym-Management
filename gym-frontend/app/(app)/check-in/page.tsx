@@ -1,73 +1,117 @@
 "use client";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { fmtTime, fullName, memberCode } from "@/lib/format";
+import type { CheckInRow, CheckResult } from "@/lib/types";
+import QrScanner from "@/components/QrScanner";
 
-const nameOf = (p: any) => p?.fullName ?? [p?.firstName, p?.lastName].filter(Boolean).join(" ");
+type Tone = "ok" | "duplicate" | "denied";
+
+const toneOf = (r: CheckResult): Tone => (!r.allowed ? "denied" : r.duplicate ? "duplicate" : "ok");
+
+const TONES: Record<Tone, { bg: string; title: string }> = {
+  ok: { bg: "bg-green-600", title: "ALLOWED" },
+  duplicate: { bg: "bg-amber-500", title: "ALREADY CHECKED IN" },
+  denied: { bg: "bg-red-600", title: "DENIED" },
+};
 
 export default function CheckInPage() {
-  const [id, setId] = useState("");
-  const [result, setResult] = useState<any>(null);
+  const [identifier, setIdentifier] = useState("");
+  const [result, setResult] = useState<CheckResult | null>(null);
   const [error, setError] = useState("");
-  const [today, setToday] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [today, setToday] = useState<CheckInRow[]>([]);
+  const [camera, setCamera] = useState(false);
+  const busy = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const loadToday = () => api("check-ins/today").then(setToday).catch(() => {});
+  const loadToday = useCallback(() => api<CheckInRow[]>("check-ins/today").then(setToday).catch(() => {}), []);
 
   useEffect(() => {
     loadToday();
     inputRef.current?.focus();
-  }, []);
+  }, [loadToday]);
 
-  async function submit(e: FormEvent) {
+  const checkIn = useCallback(
+    async (raw: string) => {
+      const value = raw.trim();
+      if (!value || busy.current) return;
+      busy.current = true;
+      setError("");
+      try {
+        setResult(await api<CheckResult>("check-ins", { method: "POST", body: JSON.stringify({ personIdentifier: value }) }));
+        loadToday();
+      } catch (e) {
+        setResult(null);
+        setError((e as Error).message);
+      } finally {
+        busy.current = false;
+        setIdentifier("");
+        inputRef.current?.focus();
+      }
+    },
+    [loadToday],
+  );
+
+  const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!id.trim()) return;
-    setLoading(true);
-    setError("");
-    try {
-      setResult(await api("check-ins", { method: "POST", body: JSON.stringify({ personIdentifier: id.trim() }) }));
-      setId("");
-      loadToday();
-    } catch (err: any) {
-      setResult(null);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-      inputRef.current?.focus();
-    }
-  }
+    checkIn(identifier);
+  };
+
+  const tone = result ? TONES[toneOf(result)] : null;
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <section className="space-y-4">
-        <h1 className="text-2xl font-bold">Reception check-in</h1>
-        <form onSubmit={submit} className="flex gap-2">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Reception check-in</h1>
+          <button onClick={() => setCamera((c) => !c)} className="rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-slate-50">
+            {camera ? "Hide camera" : "Scan with camera"}
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="flex gap-2">
           <input
             ref={inputRef}
-            value={id}
-            onChange={(e) => setId(e.target.value)}
-            placeholder="Phone, GYM-0001, or day pass code"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+            placeholder="Scan QR, or type phone / GYM-0001 / pass code"
             className="flex-1 rounded-md border bg-white p-3 text-lg"
+            autoComplete="off"
           />
-          <button disabled={loading} className="rounded-md bg-indigo-600 px-5 font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
-            Check in
-          </button>
+          <button className="rounded-md bg-indigo-600 px-5 font-medium text-white hover:bg-indigo-700">Check in</button>
         </form>
+
+        {camera && <QrScanner onCode={checkIn} />}
 
         {error && <div className="rounded bg-red-50 p-3 text-red-700">{error}</div>}
 
-        {result && (
-          <div className={`rounded-xl p-6 text-white ${result.allowed ? "bg-green-600" : "bg-red-600"}`}>
-            <div className="text-4xl font-extrabold">{result.allowed ? "ALLOWED" : "DENIED"}</div>
-            <div className="mt-1 text-lg">{result.reason}</div>
+        {result && tone && (
+          <div className={`rounded-xl p-6 text-white ${tone.bg}`}>
+            <div className="text-4xl font-extrabold">{tone.title}</div>
+            <div className="mt-1 text-lg">
+              {result.duplicate && result.checkIn ? `First scanned at ${fmtTime(result.checkIn.checkInTime)}` : result.reason}
+            </div>
+
             {result.person && (
               <div className="mt-4 border-t border-white/30 pt-3">
-                <div className="text-xl font-semibold">{nameOf(result.person)}</div>
+                <div className="text-xl font-semibold">{fullName(result.person)}</div>
                 <div className="text-sm opacity-90">
-                  {result.person.kind === "MEMBER" ? `GYM-${String(result.person.memberNumber).padStart(4, "0")}` : "Day pass"}
+                  {result.person.kind === "MEMBER" && result.person.memberNumber
+                    ? memberCode(result.person.memberNumber)
+                    : "Day pass"}
                   {result.person.phone ? ` · ${result.person.phone}` : ""}
                 </div>
               </div>
+            )}
+
+            {!result.allowed && result.person?.kind === "MEMBER" && (
+              <Link
+                href={`/members/${result.person.id}`}
+                className="mt-4 inline-block rounded-md bg-white px-4 py-2 font-medium text-red-700 hover:bg-red-50"
+              >
+                Fix membership →
+              </Link>
             )}
           </div>
         )}
@@ -80,12 +124,10 @@ export default function CheckInPage() {
           {today.map((c) => (
             <div key={c.id} className="flex items-center justify-between p-3">
               <div>
-                <div className="font-medium">{c.member ? nameOf(c.member) : c.dayPass?.visitor?.fullName ?? "Member day pass"}</div>
+                <div className="font-medium">{c.member ? fullName(c.member) : (c.dayPass?.visitor?.fullName ?? "Member day pass")}</div>
                 <div className="text-xs text-slate-500">{c.type === "MEMBER" ? "Member" : "Day pass"}</div>
               </div>
-              <div className="text-sm text-slate-600">
-                {new Date(c.checkInTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </div>
+              <div className="text-sm text-slate-600">{fmtTime(c.checkInTime)}</div>
             </div>
           ))}
         </div>

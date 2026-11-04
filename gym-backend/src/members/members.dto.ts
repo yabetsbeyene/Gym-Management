@@ -31,3 +31,8 @@ export class UpdateStatusDto {
   @IsEnum(MembershipStatus) status: MembershipStatus;
   @IsOptional() @IsString() reason?: string;
 }
+export class RenewMembershipDto {
+  @IsString() planId: string;
+  @IsOptional() @IsDateString() startDate?: string; // default: today, or the day after the current one ends
+}
+ 

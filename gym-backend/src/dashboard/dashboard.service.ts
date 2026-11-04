@@ -10,7 +10,7 @@ export class DashboardService {
     const today = todayDate();
     const { start, end } = todayRange();
 
-    const [activeMembers, frozen, suspended, expiringSoon, checkInsToday, dayPassesToday, totalMembers] =
+    const [activeMembers, frozen, suspended, expiringSoon, checkInsToday, dayPassesToday, totalMembers, deniedToday] =
       await this.prisma.$transaction([
         this.prisma.membership.count({
           where: { status: 'ACTIVE', startDate: { lte: today }, endDate: { gte: today } },
@@ -23,8 +23,18 @@ export class DashboardService {
         this.prisma.checkIn.count({ where: { checkInTime: { gte: start, lt: end } } }),
         this.prisma.dayPass.count({ where: { validDate: today } }),
         this.prisma.member.count(),
+        this.prisma.accessAttempt.count({ where: { allowed: false, createdAt: { gte: start, lt: end } } }),
       ]);
 
-    return { totalMembers, activeMembers, frozen, suspended, expiringIn7Days: expiringSoon, checkInsToday, dayPassesToday };
+    return {
+      totalMembers,
+      activeMembers,
+      frozen,
+      suspended,
+      expiringIn7Days: expiringSoon,
+      checkInsToday,
+      dayPassesToday,
+      deniedToday,
+    };
   }
 }

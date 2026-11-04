@@ -1,11 +1,9 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
-import { IsString } from 'class-validator';
+import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { JwtAuthGuard, RolesGuard } from '../common/guards';
+import { Roles } from '../common/roles.decorator';
 import { CheckInsService } from './check-ins.service';
-
-class CreateCheckInDto {
-  @IsString() personIdentifier: string; // member id / phone / GYM-0001 / day pass code
-}
+import { AttemptsQuery, CreateCheckInDto } from './check-ins.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('check-ins')
@@ -20,5 +18,11 @@ export class CheckInsController {
   @Get('today')
   today() {
     return this.checkIns.today();
+  }
+
+  @Roles(Role.ADMIN)
+  @Get('attempts')
+  attempts(@Query() query: AttemptsQuery) {
+    return this.checkIns.attempts(query);
   }
 }
