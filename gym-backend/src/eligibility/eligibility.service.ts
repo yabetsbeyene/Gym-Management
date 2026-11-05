@@ -59,7 +59,11 @@ export class EligibilityService {
   // ───── member path ─────
   private async checkMember(member: any, today: Date): Promise<EligibilityResult> {
     const person = { kind: 'MEMBER', ...member, memberships: undefined };
-
+   
+        if (member.archivedAt) {
+      return { allowed: false, reason: 'Member account is archived', person, grantedBy: null };
+    }
+    
     // 1. Active membership covering today
     const active = member.memberships.find(
       (m: any) => m.status === 'ACTIVE' && m.startDate <= today && m.endDate >= today,
@@ -121,6 +125,7 @@ export class EligibilityService {
       phone: pass.visitor?.phone ?? pass.member?.phone ?? null,
       validDate: pass.validDate,
     };
+    
     const base = { person, grantedBy: null as null, dayPassId: pass.id };
 
     if (fmt(pass.validDate) !== fmt(today)) {

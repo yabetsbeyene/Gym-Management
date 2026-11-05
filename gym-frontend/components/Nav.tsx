@@ -8,11 +8,12 @@ export default function Nav({ role, name }: { role: string; name: string }) {
   const links = [
     { href: "/check-in", label: "Check-in" },
     { href: "/members", label: "Members" },
+    { href: "/plans", label: "Packages" },
     { href: "/day-passes", label: "Day passes" },
     ...(role === "ADMIN" ? [{ href: "/dashboard", label: "Dashboard" }] : []),
   ];
   return (
-    <header className="border-b bg-white">
+    <header className="border-b bg-white print:hidden">
       <div className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3">
         <span className="font-bold text-indigo-600">GymManager</span>
         <nav className="flex gap-1">

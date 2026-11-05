@@ -1,14 +1,24 @@
 export type MembershipStatus = "ACTIVE" | "EXPIRED" | "FROZEN" | "SUSPENDED";
 
-export type Plan = { id: string; name: string; durationDays: number; price: string | number };
+export type Plan = {
+  id: string;
+  name: string;
+  description?: string | null;
+  durationDays: number;
+  price: string | number;
+  isActive: boolean;
+};
 
 export type Membership = {
   id: string;
   status: MembershipStatus;
   startDate: string;
   endDate: string;
+  statusReason?: string | null;
   plan?: Plan;
 };
+
+export type SmsLog = { id: string; message: string; status: "QUEUED" | "SENT" | "FAILED"; createdAt: string };
 
 export type Member = {
   id: string;
@@ -16,9 +26,22 @@ export type Member = {
   firstName: string;
   lastName: string;
   phone: string;
+  email?: string | null;
+  gender?: string | null;
+  dateOfBirth?: string | null;
+  address?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  photoUrl?: string | null;
+  notes?: string | null;
+  joinedAt: string;
+  archivedAt?: string | null;
   memberships: Membership[];
   checkIns?: { id: string; type: "MEMBER" | "DAY_PASS"; checkInTime: string }[];
+  notifications?: SmsLog[];
 };
+
+export type MemberList = { items: Member[]; total: number; page: number; pages: number };
 
 export type CheckResult = {
   allowed: boolean;

@@ -69,6 +69,7 @@ model Member {
   emergencyContactPhone String?
   photoUrl              String?
   notes                 String?
+  archivedAt DateTime?
   joinedAt              DateTime  @default(now())
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt

@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { addDays, membershipEnd, toDateOnly, todayDate } from '../common/date.util';
-import { CreateMemberDto, ListMembersQuery, RenewMembershipDto, UpdateStatusDto } from './members.dto';
+import { CreateMemberDto, ListMembersQuery, RenewMembershipDto, UpdateMemberDto, UpdateStatusDto } from './members.dto';
 
 const WITH_PLAN = { plan: true } as const;
 
@@ -10,16 +10,14 @@ const WITH_PLAN = { plan: true } as const;
 export class MembersService {
   constructor(private prisma: PrismaService) {}
 
-  // ───── create / read ─────
+  // ───── create / read / update ─────
   async create(dto: CreateMemberDto) {
-    const exists = await this.prisma.member.findUnique({ where: { phone: dto.phone } });
-    if (exists) throw new ConflictException('A member with this phone already exists');
-
+    await this.assertPhoneFree(dto.phone);
     const { planId, startDate, dateOfBirth, ...data } = dto;
 
     return this.prisma.$transaction(async (tx) => {
       const member = await tx.member.create({
-        data: { ...data, dateOfBirth: dateOfBirth ? toDateOnly(dateOfBirth) : undefined },
+        data: { ...data, dateOfBirth: dateOfBirth ? toDateOnly(dateOfBirth) : null },
       });
 
       if (planId) {
@@ -29,7 +27,7 @@ export class MembersService {
           data: { memberId: member.id, planId, startDate: start, endDate: membershipEnd(start, plan.durationDays) },
         });
       }
-      return tx.member.findUnique({
+      return tx.member.findUniqueOrThrow({
         where: { id: member.id },
         include: { memberships: { include: WITH_PLAN, orderBy: { endDate: 'desc' } } },
       });
@@ -37,16 +35,20 @@ export class MembersService {
   }
 
   async findAll(q: ListMembersQuery) {
-    const { search, status, page = 1, limit = 20 } = q;
+    const { search, status, archived, page = 1, limit = 20 } = q;
+    const number = /^(?:gym-?)?(\d{1,9})$/i.exec(search?.trim() ?? ''); // "GYM-0007" or "7"
+
     const where: Prisma.MemberWhereInput = {
+      archivedAt: archived ? { not: null } : null,
+      ...this.statusFilter(status),
       ...(search && {
         OR: [
           { firstName: { contains: search, mode: 'insensitive' } },
           { lastName: { contains: search, mode: 'insensitive' } },
           { phone: { contains: search } },
+          ...(number ? [{ memberNumber: Number(number[1]) }] : []),
         ],
       }),
-      ...(status && { memberships: { some: { status } } }),
     };
 
     const [items, total] = await this.prisma.$transaction([
@@ -68,10 +70,38 @@ export class MembersService {
       include: {
         memberships: { include: WITH_PLAN, orderBy: { endDate: 'desc' } },
         checkIns: { orderBy: { checkInTime: 'desc' }, take: 10 },
+        notifications: { orderBy: { createdAt: 'desc' }, take: 10 },
       },
     });
     if (!member) throw new NotFoundException('Member not found');
     return member;
+  }
+
+  async update(id: string, dto: UpdateMemberDto) {
+    await this.assertExists(id);
+    if (dto.phone) await this.assertPhoneFree(dto.phone, id);
+
+    const { firstName, lastName, phone, dateOfBirth, ...optional } = dto;
+    await this.prisma.member.update({
+      where: { id },
+      data: {
+        ...optional,
+        ...(firstName ? { firstName } : {}),
+        ...(lastName ? { lastName } : {}),
+        ...(phone ? { phone } : {}),
+        ...(dateOfBirth !== undefined ? { dateOfBirth: dateOfBirth ? toDateOnly(dateOfBirth) : null } : {}),
+      },
+    });
+    return this.findOne(id);
+  }
+
+  async setArchived(id: string, archived: boolean) {
+    await this.assertExists(id);
+    return this.prisma.member.update({
+      where: { id },
+      data: { archivedAt: archived ? new Date() : null },
+      select: { id: true, archivedAt: true },
+    });
   }
 
   // ───── renewal ─────
@@ -81,7 +111,7 @@ export class MembersService {
    * activated first so renewing can't silently bypass staff decisions.
    */
   async renew(memberId: string, dto: RenewMembershipDto) {
-    await this.findOne(memberId);
+    await this.assertExists(memberId);
     const plan = await this.requireActivePlan(this.prisma, dto.planId);
     const latest = await this.prisma.membership.findFirst({ where: { memberId }, orderBy: { endDate: 'desc' } });
 
@@ -121,10 +151,43 @@ export class MembersService {
   }
 
   // ───── helpers ─────
+  /** Filters on the real, date-aware status (an ACTIVE row past its end date counts as expired). */
+  private statusFilter(status?: ListMembersQuery['status']): Prisma.MemberWhereInput {
+    const today = todayDate();
+    const running = { status: 'ACTIVE' as const, startDate: { lte: today }, endDate: { gte: today } };
+
+    switch (status) {
+      case 'ACTIVE':
+        return { memberships: { some: running } };
+      case 'FROZEN':
+      case 'SUSPENDED':
+        return { memberships: { some: { status } } };
+      case 'EXPIRED':
+        return { memberships: { some: {}, none: { OR: [running, { status: { in: ['FROZEN', 'SUSPENDED'] } }] } } };
+      case 'NO_PLAN':
+        return { memberships: { none: {} } };
+      default:
+        return {};
+    }
+  }
+
   private async requireActivePlan(db: Prisma.TransactionClient, planId: string) {
     const plan = await db.membershipPlan.findUnique({ where: { id: planId } });
     if (!plan?.isActive) throw new BadRequestException('Invalid or inactive plan');
     return plan;
+  }
+
+  private async assertExists(id: string) {
+    const found = await this.prisma.member.findUnique({ where: { id }, select: { id: true } });
+    if (!found) throw new NotFoundException('Member not found');
+  }
+
+  private async assertPhoneFree(phone: string, exceptId?: string) {
+    const clash = await this.prisma.member.findFirst({
+      where: { phone, ...(exceptId ? { NOT: { id: exceptId } } : {}) },
+      select: { id: true },
+    });
+    if (clash) throw new ConflictException('A member with this phone already exists');
   }
 
   private async currentMembership(memberId: string) {
