@@ -1,76 +1,53 @@
+Gym Management System
+A web application for managing gym members, memberships, payments, and check-ins using QR codes.
+
+Technologies: NestJS, Next.js, PostgreSQL, Prisma, Auth.js, Tailwind CSS.
+Main Features
+- Register and manage gym members.
+- Create and manage membership packages.
+- Scan QR codes for check-ins.
+- Sell day passes.
+- Track membership expiry.
+- Manage admin and receptionist roles.
+- View dashboard statistics.
+- Keep records of check-ins.
+Project Structure
+Gym-Management/
+├── gym-backend/    # NestJS API and database
+└── gym-frontend/   # Next.js user interface
 
 
-# Gym Management System
+Installation
+1. Clone the project
+git clone https://github.com/yabetsbeyene/Gym-Management.git
+cd Gym-Management
 
-A full-stack gym management application with a NestJS backend and a Next.js frontend. The backend uses Prisma to connect to PostgreSQL.
 
-## Project Structure
-
-```text
-Gym Management/
-├── gym-backend/       # NestJS API and Prisma
-├── gym-frontend/      # Next.js web application
-├── .gitignore
- 
-```
-
-## Requirements
-
-- Node.js and npm
-- PostgreSQL
-- Git
-
-## Backend Setup
-
-Open a terminal in `gym-backend`:
-
-```powershell
+2. Start the backend
 cd gym-backend
 npm install
-```
 
-Create or update the project-root `.env` file:
 
-```env
-DATABASE_URL="postgresql://USERNAME:PASSWORD@localhost:5001/gym?schema=public"
-JWT_SECRET="YOUR_PRIVATE_JWT_SECRET"
-TZ="Africa/Addis_Ababa"
-```
-
-Replace the database username and password with your own values. URL-encode special characters in the password. Keep `.env` private and do not commit it.
-
-Generate Prisma Client:
-
-```powershell
-npx prisma generate
-```
-
-Start the backend in development mode:
-
-```powershell
+Configure your database settings in the .env file, then run:
+npx prisma migrate dev
 npm run start:dev
-```
 
-The API runs at `http://localhost:4000` by default.
 
-## Frontend Setup
+3. Start the frontend
 
-Open a second terminal in `gym-frontend`:
-
-```powershell
+Open another terminal:
 cd gym-frontend
 npm install
-```
-
-Create `gym-frontend/.env.local` and add the authentication secret required by the frontend:
-
-```env
-AUTH_SECRET="YOUR_PRIVATE_AUTH_SECRET"
-```
-
-Start the frontend:
-
-```powershell
 npm run dev
-```
- 
+
+
+Open http://localhost:3000 in your browser.
+User Roles
+- Admin: Manages members, packages, dashboard, and system records.
+- Receptionist: Registers members, manages memberships, and handles check-ins.
+Future Improvements
+- Online payments and receipts.
+- SMS notifications.
+- Staff management.
+- Automatic membership expiry reminders.
+- Online deployment.
