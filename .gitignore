@@ -30,7 +30,7 @@ prisma-connection-test.cjs
 Thumbs.db
 Desktop.ini
 
- 
+migration_lock.toml
 .idea/
 .vscode/*
 !.vscode/extensions.json
