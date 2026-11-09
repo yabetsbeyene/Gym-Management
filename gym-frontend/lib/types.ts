@@ -77,3 +77,28 @@ export type AttemptRow = {
   dayPass?: { visitor?: { fullName: string } | null } | null;
   createdBy: { name: string };
 };
+export type DashboardRange = "today" | "week" | "month";
+
+export type DashboardOverview = {
+  range: DashboardRange;
+  revenue: { amount: number; previous: number; changePct: number | null; memberships: number; dayPasses: number };
+  checkIns: { today: number; capacity: number; peakHour: number | null };
+  members: { total: number; newInRange: number; active: number; activePct: number; expiringSoon: number };
+  packages: {
+    activePlans: number;
+    top: { name: string; share: number } | null;
+    breakdown: { id: string; name: string; price: number; durationDays: number; subscribers: number; share: number }[];
+  };
+  hourly: { hour: number; count: number }[];
+  recent: {
+    id: string;
+    time: string;
+    type: "MEMBER" | "DAY_PASS";
+    memberId: string | null;
+    name: string;
+    photoUrl: string | null;
+    code: string;
+    plan: string;
+  }[];
+  insights: { tone: "good" | "warn" | "info"; text: string }[];
+};

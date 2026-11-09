@@ -25,3 +25,17 @@ export const statusStyle: Record<StatusLabel, string> = {
   SUSPENDED: "bg-red-100 text-red-700",
   "NO PLAN": "bg-amber-100 text-amber-700",
 };
+export const CURRENCY = "ETB"; // change to your currency
+export const money = (n: number) => `${Math.round(n).toLocaleString()} ${CURRENCY}`;
+
+export const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? "AM" : "PM"}`;
+
+export function timeAgo(iso: string) {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
