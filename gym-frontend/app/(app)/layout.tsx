@@ -1,24 +1,21 @@
 import { ReactNode, Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import Nav from "@/components/Nav";
+import AppShell from "@/components/AppShell";
 
 async function Shell({ children }: { children: ReactNode }) {
   const session = await auth();
   if (!session) redirect("/login");
-  const role = (session as any).role as string;
-
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <Nav role={role} name={session.user?.name ?? ""} />
-      <main className="mx-auto max-w-6xl p-6">{children}</main>
-    </div>
+    <AppShell role={(session as any).role as string} name={session.user?.name ?? ""}>
+      {children}
+    </AppShell>
   );
 }
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={<div className="p-6 text-slate-500">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#070b14]" />}>
       <Shell>{children}</Shell>
     </Suspense>
   );

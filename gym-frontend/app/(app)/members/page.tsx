@@ -25,6 +25,12 @@ export default function MembersPage() {
   const [data, setData] = useState<MemberList | null>(null);
   const [error, setError] = useState("");
 
+  // Pre-fill the search box when arriving from the dashboard search (/members?q=...)
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setSearch(q);
+  }, []);
+
   useEffect(() => {
     const qs = new URLSearchParams({ page: String(page), limit: "20" });
     if (search) qs.set("search", search);
