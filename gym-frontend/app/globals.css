@@ -24,3 +24,7 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+/* Pages not restyled yet keep their light cards; this keeps their text dark inside the dark shell */
+:where(.pg-main .bg-white, .pg-main .bg-slate-50) {
+  color: #0f172a;
+}
