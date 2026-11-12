@@ -39,21 +39,31 @@ enum SmsStatus {
 
 // ───────── Staff ─────────
 model User {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   name         String
-  email        String   @unique
+  email        String    @unique
   passwordHash String
-  role         Role     @default(RECEPTIONIST)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  role         Role      @default(RECEPTIONIST)
+  isActive     Boolean   @default(true)
+  phone        String?   @unique
+  address      String?
+  photoUrl     String?
+  notes        String?
+  lastLoginAt  DateTime?
+  deletedAt    DateTime?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  createdBy    User?  @relation("StaffCreatedBy", fields: [createdById], references: [id])
+  createdStaff User[] @relation("StaffCreatedBy")
 
   checkIns         CheckIn[]
   dayPassesCreated DayPass[]
   notifications    NotificationLog[]
-  accessAttempts  AccessAttempt[]
+  accessAttempts   AccessAttempt[]
+  auditLogs        AuditLog[]
 }
-
 // ───────── Members ─────────
 model Member {
   id                    String    @id @default(cuid())
@@ -203,4 +213,22 @@ model AccessAttempt {
 
   @@index([createdAt])
   @@index([allowed, createdAt])
+}
+// ───────── Who did what (audit trail) ─────────
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorName  String   // snapshot, so history survives renames and deletions
+  actorRole  String
+  action     String   // e.g. "member.create"
+  summary    String   // human sentence
+  entityType String?
+  entityId   String?
+  details    Json?    // submitted fields (passwords and photos removed)
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
 }
