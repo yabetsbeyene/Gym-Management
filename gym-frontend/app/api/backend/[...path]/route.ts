@@ -13,7 +13,7 @@ async function handler(req: Request, ctx: { params: Promise<{ path: string[] }> 
   const { path } = await ctx.params;
   const url = new URL(req.url);
   const target = `${process.env.API_URL}/${path.join("/")}${url.search}`;
-  const hasBody = !["GET", "HEAD"].includes(req.method);
+  const hasBody = !["GET", "HEAD", "DELETE"].includes(req.method);
 
   try {
     const res = await fetch(target, {
@@ -27,11 +27,11 @@ async function handler(req: Request, ctx: { params: Promise<{ path: string[] }> 
       headers: { "Content-Type": "application/json" },
     });
   } catch {
-    return new Response(JSON.stringify({ message: "Cannot reach the backend (is it running on port 4000?)" }), {
+    return new Response(JSON.stringify({ message: "Cannot reach the backend (is it running?)" }), {
       status: 502,
       headers: { "Content-Type": "application/json" },
     });
   }
 }
 
-export { handler as GET, handler as POST, handler as PATCH };
+export { handler as GET, handler as POST, handler as PATCH, handler as DELETE };

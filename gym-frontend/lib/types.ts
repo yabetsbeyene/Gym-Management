@@ -102,3 +102,34 @@ export type DashboardOverview = {
   }[];
   insights: { tone: "good" | "warn" | "info"; text: string }[];
 };
+export type Staff = {
+  id: string;
+  name: string;
+  email: string;
+  role: "RECEPTIONIST";
+  phone: string | null;
+  address: string | null;
+  photoUrl: string | null;
+  notes: string | null;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  createdBy: { id: string; name: string } | null;
+  _count?: { checkIns: number; dayPassesCreated: number };
+};
+export type StaffList = { items: Staff[]; max: number; used: number };
+
+export type AuditRow = {
+  id: string;
+  actorId: string | null;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  summary: string;
+  entityType: string | null;
+  entityId: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+};
+export type AuditList = { items: AuditRow[]; total: number; page: number; pages: number };
+export type AuditActor = { actorId: string | null; actorName: string; count: number };
