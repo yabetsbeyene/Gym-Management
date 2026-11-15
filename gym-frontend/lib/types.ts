@@ -133,3 +133,18 @@ export type AuditRow = {
 };
 export type AuditList = { items: AuditRow[]; total: number; page: number; pages: number };
 export type AuditActor = { actorId: string | null; actorName: string; count: number };
+export type MemberFull = Member & { autoDeleteExempt?: boolean };
+
+export type RetentionSettings = { enabled: boolean; days: number };
+
+export type PendingDeletion = {
+  id: string;
+  memberNumber: number;
+  name: string;
+  phone: string;
+  photoUrl: string | null;
+  plan: string;
+  endedOn: string;
+  deleteOn: string;
+  daysLeft: number;
+};

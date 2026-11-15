@@ -7,6 +7,7 @@ export type AuditReq = {
 export type Described = { action: string; summary: string; entityType?: string; entityId?: string };
 
 const nameOf = (p: any) => p?.fullName ?? [p?.firstName, p?.lastName].filter(Boolean).join(' ');
+const code = (n?: number) => `GYM-${String(n ?? 0).padStart(4, '0')}`;
 
 /** key = "METHOD /route/pattern"; anything not listed still gets logged with a generic sentence. */
 const RULES: Record<string, (req: AuditReq, res: any) => Described> = {
@@ -26,6 +27,12 @@ const RULES: Record<string, (req: AuditReq, res: any) => Described> = {
   }),
   'POST /members/:id/archive': (q) => ({ action: 'member.archive', summary: 'Archived a member', entityType: 'Member', entityId: q.params.id }),
   'POST /members/:id/restore': (q) => ({ action: 'member.restore', summary: 'Restored a member', entityType: 'Member', entityId: q.params.id }),
+  'POST /members/:id/protect': (q) => ({ action: 'member.protect', summary: 'Protected a member from automatic deletion', entityType: 'Member', entityId: q.params.id }),
+  'POST /members/:id/unprotect': (q) => ({ action: 'member.unprotect', summary: 'Removed automatic-deletion protection from a member', entityType: 'Member', entityId: q.params.id }),
+  // Only the member number is logged, so the delete itself leaves no personal data behind.
+  'DELETE /members/:id': (q, r) => ({ action: 'member.delete', summary: `Permanently deleted member ${code(r?.memberNumber)}`, entityType: 'Member', entityId: q.params.id }),
+
+  'POST /retention/run': (_, r) => ({ action: 'retention.run', summary: `Ran the automatic cleanup manually (${r?.deleted ?? 0} deleted)` }),
 
   'POST /plans': (_, r) => ({ action: 'plan.create', summary: `Created package ${r?.name}`, entityType: 'Plan', entityId: r?.id }),
   'PATCH /plans/:id': (q, r) => ({ action: 'plan.update', summary: `Updated package ${r?.name}`, entityType: 'Plan', entityId: q.params.id }),

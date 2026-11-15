@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, LogOut, Package, QrCode, ScanLine, ScrollText, Ticket, UserCog, Users, type LucideIcon } from "lucide-react";import Logo from "./Logo";
+import { LayoutDashboard, LogOut, Package, QrCode, ScanLine, ScrollText, Ticket, Trash2, UserCog, Users, type LucideIcon } from "lucide-react";
+import Logo from "./Logo";
 
 type Item = { href: string; label: string; icon: LucideIcon; adminOnly?: boolean };
 
@@ -13,6 +14,7 @@ const ITEMS: Item[] = [
   { href: "/plans", label: "Packages", icon: Package },
   { href: "/day-passes", label: "Day passes", icon: Ticket },
   { href: "/staff", label: "Staff", icon: UserCog, adminOnly: true },
+  { href: "/cleanup", label: "Cleanup", icon: Trash2, adminOnly: true },
   { href: "/audit", label: "Audit log", icon: ScrollText, adminOnly: true },
 ];
 

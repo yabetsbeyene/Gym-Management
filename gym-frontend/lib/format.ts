@@ -39,3 +39,21 @@ export function timeAgo(iso: string) {
   const days = Math.floor(hours / 24);
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
+/**
+ * Days left before automatic deletion, or null when the member is not on the deletion path
+ * (still active, frozen, suspended, protected, archived, or no package).
+ * 0 or less means "will be deleted at the next cleanup".
+ */
+export function deletionCountdown(
+  m: { memberships: Membership[]; autoDeleteExempt?: boolean; archivedAt?: string | null },
+  days: number,
+): number | null {
+  const latest = m.memberships[0];
+  if (!latest || m.autoDeleteExempt || m.archivedAt) return null;
+  if (latest.status === "FROZEN" || latest.status === "SUSPENDED") return null;
+
+  const ended = new Date(`${fmtDate(latest.endDate)}T00:00:00`).getTime();
+  const today = new Date(`${new Date().toLocaleDateString("en-CA")}T00:00:00`).getTime();
+  const daysSinceEnd = Math.round((today - ended) / 86_400_000);
+  return daysSinceEnd >= 1 ? days + 1 - daysSinceEnd : null;
+}

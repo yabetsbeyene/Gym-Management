@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard, RolesGuard } from '../common/guards';
 import { Roles } from '../common/roles.decorator';
@@ -50,5 +50,23 @@ export class MembersController {
   @Post(':id/restore')
   restore(@Param('id') id: string) {
     return this.members.setArchived(id, false);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post(':id/protect')
+  protect(@Param('id') id: string) {
+    return this.members.setExempt(id, true);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post(':id/unprotect')
+  unprotect(@Param('id') id: string) {
+    return this.members.setExempt(id, false);
+  }
+
+  @Roles(Role.ADMIN)
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.members.erase(id);
   }
 }

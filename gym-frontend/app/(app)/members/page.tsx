@@ -3,8 +3,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useRole } from "@/lib/useRole";
-import { displayStatus, fmtDate, fullName, memberCode, statusStyle } from "@/lib/format";
-import type { MemberList } from "@/lib/types";
+import { deletionCountdown, displayStatus, fmtDate, fullName, memberCode, statusStyle } from "@/lib/format";
+import type { MemberList, RetentionSettings } from "@/lib/types";
 import Avatar from "@/components/Avatar";
 
 const FILTERS = [
@@ -23,12 +23,14 @@ export default function MembersPage() {
   const [archived, setArchived] = useState(false);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<MemberList | null>(null);
+  const [retention, setRetention] = useState<RetentionSettings | null>(null);
   const [error, setError] = useState("");
 
   // Pre-fill the search box when arriving from the dashboard search (/members?q=...)
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("q");
     if (q) setSearch(q);
+    api<RetentionSettings>("retention").then(setRetention).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -103,6 +105,7 @@ export default function MembersPage() {
             {data?.items.map((m) => {
               const ms = m.memberships[0];
               const st = displayStatus(ms);
+              const left = retention?.enabled ? deletionCountdown(m, retention.days) : null;
               return (
                 <tr key={m.id} className="hover:bg-slate-50">
                   <td className="p-3">
@@ -116,7 +119,14 @@ export default function MembersPage() {
                   </td>
                   <td className="p-3">{m.phone}</td>
                   <td className="p-3">{ms?.plan?.name ?? "-"}</td>
-                  <td className="p-3">{ms ? fmtDate(ms.endDate) : "-"}</td>
+                  <td className="p-3">
+                    {ms ? fmtDate(ms.endDate) : "-"}
+                    {left !== null && (
+                      <div className="text-[11px] font-medium text-rose-600">
+                        {left <= 0 ? "Deleting soon" : `Deletes in ${left} day${left === 1 ? "" : "s"}`}
+                      </div>
+                    )}
+                  </td>
                   <td className="p-3">
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusStyle[st]}`}>{st}</span>
                   </td>

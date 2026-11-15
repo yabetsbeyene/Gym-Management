@@ -1,11 +1,12 @@
 "use client";
+import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useRole } from "@/lib/useRole";
-import { displayStatus, fmtDate, fmtDateTime, fullName, memberCode, statusStyle } from "@/lib/format";
-import type { CheckResult, Member, MembershipStatus, Plan } from "@/lib/types";
+import { deletionCountdown, displayStatus, fmtDate, fmtDateTime, fullName, memberCode, statusStyle } from "@/lib/format";
+import type { CheckResult, MemberFull, MembershipStatus, Plan, RetentionSettings } from "@/lib/types";
 import Avatar from "@/components/Avatar";
 import MemberForm, { fromMember, toPayload, type MemberFormValues } from "@/components/MemberForm";
 import PlanPicker from "@/components/PlanPicker";
@@ -23,20 +24,23 @@ function Row({ label, value }: { label: string; value?: string | null }) {
 
 export default function MemberProfilePage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const isAdmin = useRole() === "ADMIN";
-  const [member, setMember] = useState<Member | null>(null);
+  const [member, setMember] = useState<MemberFull | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [retention, setRetention] = useState<RetentionSettings | null>(null);
   const [planId, setPlanId] = useState("");
   const [editing, setEditing] = useState(false);
   const [sms, setSms] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const load = useCallback(() => api<Member>(`members/${id}`).then(setMember).catch((e) => setError(e.message)), [id]);
+  const load = useCallback(() => api<MemberFull>(`members/${id}`).then(setMember).catch((e) => setError(e.message)), [id]);
 
   useEffect(() => {
     load();
     api<Plan[]>("plans").then(setPlans).catch(() => {});
+    api<RetentionSettings>("retention").then(setRetention).catch(() => {});
   }, [load]);
 
   /** Runs an action, shows success/error, then refreshes the profile. */
@@ -82,6 +86,25 @@ export default function MemberProfilePage() {
     run(() => api(`members/${id}/${archived ? "archive" : "restore"}`, { method: "POST" }), archived ? "Member archived." : "Member restored.");
   };
 
+  const toggleProtect = (protect: boolean) =>
+    run(
+      () => api(`members/${id}/${protect ? "protect" : "unprotect"}`, { method: "POST" }),
+      protect ? "This member is protected from automatic deletion." : "Automatic deletion applies to this member again.",
+    );
+
+  async function deleteForever() {
+    const typed = window.prompt(
+      `This permanently erases ${fullName(member)}'s personal data and cannot be undone.\nTheir anonymous check-in history stays in the reports.\n\nType DELETE to confirm:`,
+    );
+    if (typed !== "DELETE") return;
+    try {
+      await api(`members/${id}`, { method: "DELETE" });
+      router.push("/members");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   async function checkInNow() {
     setError("");
     setNotice("");
@@ -95,11 +118,24 @@ export default function MemberProfilePage() {
     }
   }
 
-  if (!member) return error ? <div className="rounded bg-red-50 p-3 text-red-700">{error}</div> : <p className="text-slate-500">Loading…</p>;
+  if (!member) {
+    if (!error) return <p className="text-slate-500">Loading…</p>;
+    return (
+      <div className="mx-auto max-w-md space-y-4 rounded-xl border bg-white p-8 text-center">
+        <div className="text-xl font-semibold">{error}</div>
+        <p className="text-sm text-slate-500">This member doesn&apos;t exist, was deleted, or the link is old.</p>
+        <div className="flex justify-center gap-2">
+          <Link href="/members/new" className="rounded-md bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700">+ Create member</Link>
+          <Link href="/members" className={btn}>Back to members</Link>
+        </div>
+      </div>
+    );
+  }
 
   const latest = member.memberships[0];
   const status = displayStatus(latest);
   const name = fullName(member);
+  const left = retention?.enabled ? deletionCountdown(member, retention.days) : null;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_auto]">
@@ -112,10 +148,21 @@ export default function MemberProfilePage() {
           </div>
           <span className={`rounded px-2 py-1 text-xs font-medium ${statusStyle[status]}`}>{status}</span>
           {member.archivedAt && <span className="rounded bg-slate-800 px-2 py-1 text-xs text-white">ARCHIVED</span>}
+          {member.autoDeleteExempt && <span className="rounded bg-indigo-100 px-2 py-1 text-xs text-indigo-700">PROTECTED</span>}
           <button onClick={checkInNow} className="ml-auto rounded-md bg-green-600 px-4 py-2 font-medium text-white hover:bg-green-700">
             Check in now
           </button>
         </header>
+
+        {left !== null && retention && (
+          <div className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800">
+            <b>Scheduled for automatic deletion.</b>{" "}
+            {left <= 0
+              ? "This member will be deleted at the next cleanup (within the hour)."
+              : `This member will be deleted in ${left} day${left === 1 ? "" : "s"} unless the membership is renewed.`}{" "}
+            Renewing below cancels it.
+          </div>
+        )}
 
         {error && <div className="rounded bg-red-50 p-3 text-red-700">{error}</div>}
         {notice && <div className="rounded bg-green-50 p-3 text-green-700">{notice}</div>}
@@ -218,15 +265,26 @@ export default function MemberProfilePage() {
         </section>
 
         {isAdmin && (
-          <section className="rounded-xl border border-red-200 bg-white p-5">
-            <h2 className="mb-2 font-semibold text-red-700">Admin</h2>
-            {member.archivedAt ? (
-              <button onClick={() => archive(false)} className={btn}>Restore member</button>
-            ) : (
-              <button onClick={() => archive(true)} className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50">
-                Archive member
+          <section className="space-y-3 rounded-xl border border-red-200 bg-white p-5">
+            <h2 className="font-semibold text-red-700">Admin</h2>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => toggleProtect(!member.autoDeleteExempt)} className={btn}>
+                {member.autoDeleteExempt ? "Remove protection" : "Protect from auto-delete"}
               </button>
-            )}
+              {member.archivedAt ? (
+                <button onClick={() => archive(false)} className={btn}>Restore member</button>
+              ) : (
+                <button onClick={() => archive(true)} className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50">
+                  Archive member
+                </button>
+              )}
+              <button onClick={deleteForever} className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">
+                Delete permanently
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Archive hides a member and can be undone. Delete erases their personal data for good; only anonymous check-in history is kept for reports.
+            </p>
           </section>
         )}
       </div>

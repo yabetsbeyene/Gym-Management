@@ -83,12 +83,13 @@ model Member {
   joinedAt              DateTime  @default(now())
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
-
+  autoDeleteExempt Boolean   @default(false)
+  deletedAt        DateTime?
   memberships   Membership[]
   dayPasses     DayPass[]
   checkIns      CheckIn[]
   notifications NotificationLog[]
-   accessAttempts  AccessAttempt[]
+  accessAttempts  AccessAttempt[]
 
   @@index([lastName, firstName])
 }

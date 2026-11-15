@@ -39,6 +39,7 @@ export class MembersService {
     const number = /^(?:gym-?)?(\d{1,9})$/i.exec(search?.trim() ?? ''); // "GYM-0007" or "7"
 
     const where: Prisma.MemberWhereInput = {
+      deletedAt: null,
       archivedAt: archived ? { not: null } : null,
       ...this.statusFilter(status),
       ...(search && {
@@ -65,8 +66,8 @@ export class MembersService {
   }
 
   async findOne(id: string) {
-    const member = await this.prisma.member.findUnique({
-      where: { id },
+    const member = await this.prisma.member.findFirst({
+      where: { id, deletedAt: null },
       include: {
         memberships: { include: WITH_PLAN, orderBy: { endDate: 'desc' } },
         checkIns: { orderBy: { checkInTime: 'desc' }, take: 10 },
@@ -104,6 +105,53 @@ export class MembersService {
     });
   }
 
+  /** Protected members are never removed by the automatic cleanup. */
+  async setExempt(id: string, exempt: boolean) {
+    await this.assertExists(id);
+    return this.prisma.member.update({
+      where: { id },
+      data: { autoDeleteExempt: exempt },
+      select: { id: true, autoDeleteExempt: true },
+    });
+  }
+
+  /**
+   * Permanent delete = erase personal data. The anonymous rows (memberships, check-ins, day passes)
+   * stay so reports and revenue history don't change. The member disappears from every list,
+   * can't be found by QR or phone, and the phone number becomes reusable.
+   */
+  async erase(id: string) {
+    const member = await this.prisma.member.findFirst({ where: { id, deletedAt: null }, select: { memberNumber: true } });
+    if (!member) throw new NotFoundException('Member not found');
+
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.member.update({
+        where: { id },
+        data: {
+          firstName: 'Deleted',
+          lastName: 'member',
+          phone: `deleted-${id}`, // required + unique, so it is replaced rather than cleared
+          email: null,
+          gender: null,
+          dateOfBirth: null,
+          address: null,
+          emergencyContactName: null,
+          emergencyContactPhone: null,
+          photoUrl: null,
+          notes: null,
+          archivedAt: now, // existing "archived" filters now hide the member everywhere
+          deletedAt: now,
+        },
+      }),
+      this.prisma.membership.updateMany({ where: { memberId: id }, data: { statusReason: null } }),
+      this.prisma.notificationLog.updateMany({ where: { memberId: id }, data: { phone: 'erased', message: '[erased]' } }),
+      this.prisma.accessAttempt.updateMany({ where: { memberId: id }, data: { identifier: '[erased]' } }),
+      this.prisma.auditLog.updateMany({ where: { entityType: 'Member', entityId: id }, data: { details: Prisma.DbNull } }),
+    ]);
+    return { ok: true, memberNumber: member.memberNumber };
+  }
+
   // ───── renewal ─────
   /**
    * Adds a new membership. If the current one is still running, the new one starts the day
@@ -132,6 +180,7 @@ export class MembersService {
   // ───── status (freeze / suspend / activate) ─────
   /** Applies to the membership running today, falling back to the most recent one. */
   async updateStatus(memberId: string, dto: UpdateStatusDto) {
+    await this.assertExists(memberId);
     const current = await this.currentMembership(memberId);
     if (!current) throw new NotFoundException('This member has no membership');
 
@@ -178,7 +227,7 @@ export class MembersService {
   }
 
   private async assertExists(id: string) {
-    const found = await this.prisma.member.findUnique({ where: { id }, select: { id: true } });
+    const found = await this.prisma.member.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
     if (!found) throw new NotFoundException('Member not found');
   }
 
