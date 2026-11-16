@@ -4,12 +4,13 @@ import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertStrongPassword } from '../common/password.policy';
 import { CreateStaffDto, UpdateStaffDto } from './staff.dto';
 
 /** Everything the UI may see: never the password hash. */
 const SELECT = {
   id: true, name: true, email: true, role: true, phone: true, address: true, photoUrl: true, notes: true,
-  isActive: true, lastLoginAt: true, createdAt: true,
+  isActive: true, mustChangePassword: true, lastLoginAt: true, createdAt: true,
   createdBy: { select: { id: true, name: true } },
   _count: { select: { checkIns: true, dayPassesCreated: true } },
 } satisfies Prisma.UserSelect;
@@ -38,7 +39,8 @@ export class StaffService {
 
   async create(dto: CreateStaffDto, adminId: string) {
     const { password, ...profile } = dto;
-    const passwordHash = await bcrypt.hash(password, 10);
+    assertStrongPassword(password, { email: dto.email, name: dto.name });
+    const passwordHash = await bcrypt.hash(password, 12);
 
     return this.unique(() =>
       this.prisma.$transaction(async (tx) => {
@@ -49,7 +51,8 @@ export class StaffService {
           throw new ConflictException(`Maximum of ${this.max} receptionist accounts reached. Delete one first.`);
         }
         return tx.user.create({
-          data: { ...profile, passwordHash, role: 'RECEPTIONIST', createdById: adminId },
+          // The admin chose a policy-compliant password, so no forced change (receptionists can't change it anyway).
+          data: { ...profile, passwordHash, role: 'RECEPTIONIST', createdById: adminId, mustChangePassword: false, passwordChangedAt: new Date() },
           select: SELECT,
         });
       }),
@@ -66,9 +69,14 @@ export class StaffService {
     return this.prisma.user.update({ where: { id }, data: { isActive }, select: SELECT });
   }
 
+  /** The only way a receptionist's password changes. Also releases an account locked by the weak-password rule. */
   async resetPassword(id: string, password: string) {
     const staff = await this.require(id);
-    await this.prisma.user.update({ where: { id }, data: { passwordHash: await bcrypt.hash(password, 10) } });
+    assertStrongPassword(password, { email: staff.email, name: staff.name });
+    await this.prisma.user.update({
+      where: { id },
+      data: { passwordHash: await bcrypt.hash(password, 12), mustChangePassword: false, passwordChangedAt: new Date() },
+    });
     return { ok: true, name: staff.name };
   }
 
@@ -93,7 +101,7 @@ export class StaffService {
 
   // ───── helpers ─────
   private async require(id: string) {
-    const staff = await this.prisma.user.findFirst({ where: { id, ...LIVE_RECEPTIONISTS }, select: { id: true, name: true } });
+    const staff = await this.prisma.user.findFirst({ where: { id, ...LIVE_RECEPTIONISTS }, select: { id: true, name: true, email: true } });
     if (!staff) throw new NotFoundException('Receptionist not found');
     return staff;
   }

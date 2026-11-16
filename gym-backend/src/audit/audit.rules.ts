@@ -51,7 +51,8 @@ const RULES: Record<string, (req: AuditReq, res: any) => Described> = {
   },
 
   'POST /sms/send': (q, r) => ({ action: 'sms.send', summary: `Sent an SMS (${r?.status})`, entityType: q.body?.memberId ? 'Member' : undefined, entityId: q.body?.memberId }),
-
+  'PATCH /auth/profile': () => ({ action: 'admin.profile', summary: 'Updated own profile' }),
+  'POST /auth/change-password': () => ({ action: 'admin.password', summary: 'Changed own password' }),
   'POST /staff': (_, r) => ({ action: 'staff.create', summary: `Created receptionist account for ${r?.name}`, entityType: 'Staff', entityId: r?.id }),
   'PATCH /staff/:id': (q, r) => ({ action: 'staff.update', summary: `Edited receptionist ${r?.name}`, entityType: 'Staff', entityId: q.params.id }),
   'POST /staff/:id/activate': (q, r) => ({ action: 'staff.activate', summary: `Activated receptionist ${r?.name}`, entityType: 'Staff', entityId: q.params.id }),
