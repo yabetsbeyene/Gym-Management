@@ -54,10 +54,10 @@ model User {
   createdById  String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-
+  
   createdBy    User?  @relation("StaffCreatedBy", fields: [createdById], references: [id])
   createdStaff User[] @relation("StaffCreatedBy")
-    mustChangePassword Boolean   @default(true)
+  mustChangePassword Boolean   @default(true)
   passwordChangedAt  DateTime?
   checkIns         CheckIn[]
   dayPassesCreated DayPass[]
