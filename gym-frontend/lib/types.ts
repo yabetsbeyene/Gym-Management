@@ -116,6 +116,7 @@ export type Staff = {
   createdAt: string;
   createdBy: { id: string; name: string } | null;
   _count?: { checkIns: number; dayPassesCreated: number };
+  mustChangePassword?: boolean;
 };
 export type StaffList = { items: Staff[]; max: number; used: number };
 
@@ -147,4 +148,14 @@ export type PendingDeletion = {
   endedOn: string;
   deleteOn: string;
   daysLeft: number;
+};
+export type Me = {
+  id: string;
+  name: string;
+  email: string;
+  role: "ADMIN" | "RECEPTIONIST";
+  phone: string | null;
+  address: string | null;
+  photoUrl: string | null;
+  mustChangePassword: boolean;
 };

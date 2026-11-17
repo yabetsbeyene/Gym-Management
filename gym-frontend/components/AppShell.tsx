@@ -1,9 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, LogOut, Package, QrCode, ScanLine, ScrollText, Ticket, Trash2, UserCog, Users, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, LogOut, Package, QrCode, ScanLine, ScrollText, Ticket, Trash2, UserCircle, UserCog, Users, type LucideIcon } from "lucide-react";
+import { api } from "@/lib/api";
+import type { Me } from "@/lib/types";
 import Logo from "./Logo";
+import PasswordGate from "./PasswordGate";
 
 type Item = { href: string; label: string; icon: LucideIcon; adminOnly?: boolean };
 
@@ -16,6 +20,7 @@ const ITEMS: Item[] = [
   { href: "/staff", label: "Staff", icon: UserCog, adminOnly: true },
   { href: "/cleanup", label: "Cleanup", icon: Trash2, adminOnly: true },
   { href: "/audit", label: "Audit log", icon: ScrollText, adminOnly: true },
+  { href: "/profile", label: "My profile", icon: UserCircle, adminOnly: true },
 ];
 
 export default function AppShell({ role, name, children }: { role: string; name: string; children: React.ReactNode }) {
@@ -23,6 +28,13 @@ export default function AppShell({ role, name, children }: { role: string; name:
   const items = ITEMS.filter((i) => !i.adminOnly || role === "ADMIN");
   const isActive = (href: string) => path.startsWith(href);
   const logout = () => signOut({ callbackUrl: "/login" });
+
+  // undefined = still loading, null = could not load (show the app anyway; the API still enforces the rules)
+  const [me, setMe] = useState<Me | null | undefined>(undefined);
+  const loadMe = useCallback(() => api<Me>("auth/me").then(setMe).catch(() => setMe(null)), []);
+  useEffect(() => {
+    loadMe();
+  }, [loadMe]);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#070b14] text-slate-100 antialiased selection:bg-cyan-500 selection:text-black md:flex-row print:bg-white print:text-black">
@@ -106,7 +118,13 @@ export default function AppShell({ role, name, children }: { role: string; name:
       </header>
 
       <main className="pg-main min-w-0 flex-1 bg-gradient-to-b from-[#0b101d] via-[#070b14] to-[#04060b] p-4 md:p-8 print:bg-white">
-        {children}
+        {me === undefined ? (
+          <p className="text-slate-400">Loading…</p>
+        ) : me?.mustChangePassword ? (
+          <PasswordGate me={me} onRefresh={loadMe} />
+        ) : (
+          children
+        )}
       </main>
     </div>
   );
