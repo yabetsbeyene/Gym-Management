@@ -36,6 +36,8 @@ export default function AppShell({ role, name, children }: { role: string; name:
     loadMe();
   }, [loadMe]);
 
+  const locked = !!me?.mustChangePassword;
+
   return (
     <div className="flex min-h-screen flex-col bg-[#070b14] text-slate-100 antialiased selection:bg-cyan-500 selection:text-black md:flex-row print:bg-white print:text-black">
       {/* Desktop sidebar */}
@@ -118,13 +120,14 @@ export default function AppShell({ role, name, children }: { role: string; name:
       </header>
 
       <main className="pg-main min-w-0 flex-1 bg-gradient-to-b from-[#0b101d] via-[#070b14] to-[#04060b] p-4 md:p-8 print:bg-white">
-        {me === undefined ? (
-          <p className="text-slate-400">Loading…</p>
-        ) : me?.mustChangePassword ? (
-          <PasswordGate me={me} onRefresh={loadMe} />
-        ) : (
-          children
-        )}
+        {me === undefined && <p className="text-slate-400">Loading…</p>}
+        {me?.mustChangePassword && <PasswordGate me={me} onRefresh={loadMe} />}
+
+        {/* Always rendered so Next.js can validate every page; hidden while loading or locked.
+            The key makes the page reload its data once the password has been changed. */}
+        <div key={locked ? "locked" : "open"} hidden={me === undefined || locked}>
+          {children}
+        </div>
       </main>
     </div>
   );
